@@ -1562,9 +1562,9 @@ macro_rules! location {
 #[snafu(provide(opt, ref, chain, dyn std::error::Error => source.as_deref()))]
 #[cfg(any(feature = "std", test))]
 pub struct Whatever {
-    #[snafu(source(from(Box<dyn std::error::Error>, Some)))]
+    #[snafu(source(from(Box<dyn std::error::Error + Send + Sync>, Some)))]
     #[snafu(provide(false))]
-    source: Option<Box<dyn std::error::Error>>,
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
     message: String,
     backtrace: Backtrace,
 }
