@@ -28,6 +28,7 @@
 //!   - [`Options`](OptionExt)
 #![cfg_attr(feature = "futures", doc = "   - [`Futures`](futures::TryFutureExt)")]
 #![cfg_attr(feature = "futures", doc = "   - [`Streams`](futures::TryStreamExt)")]
+//! - [Error reporting](#reporting)
 //! - Suitable for libraries and applications
 //! - `no_std` compatibility
 //! - Generic types and lifetimes
@@ -200,6 +201,63 @@
 //! your error type to be used in multithreaded programs, by changing
 //! `dyn std::error::Error` to `dyn std::error::Error + Send + Sync`.
 //!
+//! ## Reporting
+//!
+//! Printing an error via [`Display`][]
+//! will only show the top-level error message without the underlying sources.
+//! For an extended error report,
+//! SNAFU offers a user-friendly error output mechanism.
+//! It prints the main error and all underlying errors in the chain,
+//! from the most recent to the oldest,
+//! plus the [backtrace](Backtrace) if applicable.
+//! This is done by using the [`macro@report`] procedural macro
+//! or the [`Report`] type directly.
+//!
+//! ```no_run
+//! use snafu::prelude::*;
+//!
+//! #[derive(Debug, Snafu)]
+//! #[snafu(display("Could not load configuration file {path}"))]
+//! struct ConfigFileError {
+//!     source: std::io::Error,
+//!     path: String,
+//! }
+//!
+//! fn read_config_file(path: &str) -> Result<String, ConfigFileError> {
+//!     std::fs::read_to_string(path).context(ConfigFileSnafu { path })
+//! }
+//!
+//! #[snafu::report]
+//! fn main() -> Result<(), ConfigFileError> {
+//!     read_config_file("bad-config.ini")?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! This will print:
+//!
+//! ```none
+//! Error: Could not load configuration file bad-config.ini
+//!
+//! Caused by this error:
+//! 1: No such file or directory (os error 2)
+//! ```
+//!
+//! Which shows the underlying errors, unlike [`Display`]:
+//!
+//! ```none
+//! Error: Could not load configuration file bad-config.ini
+//! ```
+//!
+//! ... and is also more readable than the [`Debug`] output:
+//!
+//! ```none
+//! Error: ConfigFileError { source: Os { code: 2, kind: NotFound, message: "No such file or directory" }, path: "bad-config.ini" }
+//! ```
+//!
+//! [`Display`]: core::fmt::Display
+//! [`Debug`]: core::fmt::Debug
+//!
 //! ## Next steps
 //!
 //! Read the documentation for the [`Snafu`][] macro to see all of the
@@ -338,27 +396,43 @@ generate_guide! {
     }
 }
 
-#[cfg(feature = "unstable-core-error")]
+#[cfg(any(feature = "rust_1_81", feature = "unstable-core-error"))]
 #[doc(hidden)]
 pub use core::error;
 
-#[cfg(feature = "unstable-core-error")]
+#[cfg(any(feature = "rust_1_81", feature = "unstable-core-error"))]
 #[doc(hidden)]
 pub use core::error::Error;
 
-#[cfg(all(not(feature = "unstable-core-error"), any(feature = "std", test)))]
+#[cfg(all(
+    not(any(feature = "rust_1_81", feature = "unstable-core-error")),
+    any(feature = "std", test)
+))]
 #[doc(hidden)]
 pub use std::error;
 
-#[cfg(all(not(feature = "unstable-core-error"), any(feature = "std", test)))]
+#[cfg(all(
+    not(any(feature = "rust_1_81", feature = "unstable-core-error")),
+    any(feature = "std", test)
+))]
 #[doc(hidden)]
 pub use std::error::Error;
 
-#[cfg(not(any(feature = "unstable-core-error", feature = "std", test)))]
-mod no_std_error;
-#[cfg(not(any(feature = "unstable-core-error", feature = "std", test)))]
+#[cfg(not(any(
+    feature = "rust_1_81",
+    feature = "unstable-core-error",
+    feature = "std",
+    test
+)))]
+mod fallback_error;
+#[cfg(not(any(
+    feature = "rust_1_81",
+    feature = "unstable-core-error",
+    feature = "std",
+    test
+)))]
 #[doc(hidden)]
-pub use no_std_error::Error;
+pub use fallback_error::Error;
 
 /// Ensure a condition is true. If it is not, return from the function
 /// with an error.
